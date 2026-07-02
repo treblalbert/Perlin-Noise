@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perlin Noise Terrain Lab</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#0c0e0d',
+                        'bg-el': '#141715',
+                        card: '#1a1e1b',
+                        bdr: '#2a2f2b',
+                        fg: '#e2ddd4',
+                        'fg-dim': '#a09a8e',
+                        muted: '#6b665c',
+                        accent: '#c8943e',
+                        'accent-h': '#daa84e',
+                        'accent-d': '#8b6528',
+                        danger: '#c84040',
+                    },
+                    fontFamily: {
+                        display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        };
+    </script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: #0c0e0d;
+            color: #e2ddd4;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #141715; }
+        ::-webkit-scrollbar-thumb { background: #2a2f2b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3f3b; }
+
+        /* Range sliders */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 5px;
+            background: #2a2f2b;
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #c8943e;
+            cursor: pointer;
+            border: 2px solid #0c0e0d;
+            box-shadow: 0 0 8px rgba(200,148,62,0.35);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 12px rgba(200,148,62,0.55);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #c8943e;
+            cursor: pointer;
+            border: 2px solid #0c0e0d;
+            box-shadow: 0 0 8px rgba(200,148,62,0.35);
+        }
+
+        /* Panel styling */
+        .viz-panel {
+            background: #141715;
+            border: 1px solid #2a2f2b;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: border-color 0.3s;
+        }
+        .viz-panel:hover { border-color: #3a3f3b; }
+        .viz-panel.live { border-color: rgba(200,148,62,0.4); }
+        .panel-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: #1a1e1b;
+            border-bottom: 1px solid #2a2f2b;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #a09a8e;
+        }
+        .panel-bar .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: #c8943e;
+            box-shadow: 0 0 6px rgba(200,148,62,0.5);
+        }
+        .panel-bar .dot.off { background: #6b665c; box-shadow: none; }
+        #canvas2d {
+            image-rendering: pixelated;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #three-container {
+            width: 100%;
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+        #three-container canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Controls area */
+        .controls-scroll {
+            overflow-y: auto;
+            padding: 16px 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            background: #0c0e0d;
+            border-top: 1px solid #2a2f2b;
+            max-height: 42vh;
+        }
+        .ctrl-card {
+            background: #141715;
+            border: 1px solid #2a2f2b;
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+        .ctrl-card h3 {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #c8943e;
+            margin-bottom: 12px;
+        }
+        .ctrl-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .ctrl-row:last-child { margin-bottom: 0; }
+        .ctrl-label {
+            font-size: 12px;
+            color: #a09a8e;
+            min-width: 80px;
+            white-space: nowrap;
+        }
+        .ctrl-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #c8943e;
+            min-width: 50px;
+            text-align: right;
+        }
+        .ctrl-row input[type="range"] { flex: 1; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: 'Space Grotesk', sans-serif;
+            border: 1px solid #2a2f2b;
+            background: #1a1e1b;
+            color: #e2ddd4;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #222623; border-color: #3a3f3b; }
+        .btn-accent {
+            background: rgba(200,148,62,0.15);
+            border-color: rgba(200,148,62,0.3);
+            color: #c8943e;
+        }
+        .btn-accent:hover {
+            background: rgba(200,148,62,0.25);
+            border-color: rgba(200,148,62,0.5);
+        }
+        .btn-danger {
+            color: #c84040;
+            border-color: rgba(200,64,64,0.3);
+        }
+        .btn-danger:hover {
+            background: rgba(200,64,64,0.15);
+            border-color: rgba(200,64,64,0.5);
+        }
+        .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+        /* Colormap selector */
+        .cmap-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .cmap-btn {
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: 'Space Grotesk', sans-serif;
+            border: 1px solid #2a2f2b;
+            background: #1a1e1b;
+            color: #a09a8e;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .cmap-btn.active {
+            border-color: #c8943e;
+            color: #c8943e;
+            background: rgba(200,148,62,0.1);
+        }
+        .cmap-btn:hover:not(.active) { border-color: #3a3f3b; color: #e2ddd4; }
+
+        /* Layer items */
+        .layer-item {
+            background: #1a1e1b;
+            border: 1px solid #2a2f2b;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            animation: fadeSlideIn 0.25s ease-out;
+        }
+        .layer-item:last-child { margin-bottom: 0; }
+        .layer-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .layer-head span {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e2ddd4;
+        }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Toggle */
+        .toggle-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toggle {
+            width: 36px;
+            height: 20px;
+            background: #2a2f2b;
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.25s;
+        }
+        .toggle.on { background: rgba(200,148,62,0.4); }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #6b665c;
+            transition: all 0.25s;
+        }
+        .toggle.on::after {
+            left: 19px;
+            background: #c8943e;
+            box-shadow: 0 0 6px rgba(200,148,62,0.5);
+        }
+
+        /* Tooltip on canvas */
+        .canvas-tooltip {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(12,14,13,0.85);
+            backdrop-filter: blur(6px);
+            border: 1px solid #2a2f2b;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #a09a8e;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .canvas-tooltip.show { opacity: 1; }
+
+        /* FPS */
+        .fps-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(12,14,13,0.8);
+            border: 1px solid #2a2f2b;
+            border-radius: 5px;
+            padding: 2px 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #6b665c;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .viz-row { flex-direction: column !important; }
+            .controls-scroll { max-height: 50vh; }
+        }
+
+        /* Noise background texture */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+        }
+        body > * { position: relative; z-index: 1; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="flex items-center justify-between px-5 py-3 border-b border-bdr bg-bg-el/80 backdrop-blur-sm" style="min-height:52px">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-accent/15 border border-accent/30 flex items-center justify-center">
+                <i class="fas fa-mountain text-accent text-sm"></i>
+            </div>
+            <div>
+                <h1 class="text-fg font-bold text-base leading-tight tracking-tight">Perlin Noise Terrain Lab</h1>
+                <p class="text-muted text-[10px] tracking-wider uppercase">Real-time 2D & 3D noise visualization</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button class="btn btn-sm" id="btn-export" title="Export 2D as PNG">
+                <i class="fas fa-download text-xs"></i> Export
+            </button>
+            <button class="btn btn-sm" id="btn-reset-cam" title="Reset 3D camera">
+                <i class="fas fa-video text-xs"></i> Reset View
+            </button>
+        </div>
+    </header>
+
+    <!-- Visualization panels -->
+    <div class="flex flex-1 min-h-0 viz-row" style="gap:12px; padding:12px;">
+        <!-- 2D Panel -->
+        <div class="viz-panel flex-1" id="panel-2d" style="aspect-ratio:1;">
+            <div class="panel-bar">
+                <div class="flex items-center gap-2">
+                    <div class="dot" id="dot-2d"></div>
+                    <span>2D Noise Map</span>
+                </div>
+                <span class="font-mono text-[10px] text-muted" id="canvas-size">400 x 400</span>
+            </div>
+            <div style="flex:1; position:relative; overflow:hidden; background:#0a0c0b;">
+                <canvas id="canvas2d" width="400" height="400"></canvas>
+                <div class="canvas-tooltip" id="tooltip-2d">x: 0, y: 0, val: 0.00</div>
+            </div>
+        </div>
+
+        <!-- 3D Panel -->
+        <div class="viz-panel flex-1" id="panel-3d" style="aspect-ratio:1;">
+            <div class="panel-bar">
+                <div class="flex items-center gap-2">
+                    <div class="dot" id="dot-3d"></div>
+                    <span>3D Terrain</span>
+                </div>
+                <span class="font-mono text-[10px] text-muted" id="vert-count">--</span>
+            </div>
+            <div id="three-container">
+                <div class="fps-badge" id="fps-display" style="display:none;">-- fps</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-scroll" id="controls">
+        <!-- Base Noise -->
+        <div class="ctrl-card">
+            <h3><i class="fas fa-wave-square mr-1"></i> Base Noise</h3>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Scale</span>
+                <input type="range" id="ctrl-scale" min="0.003" max="0.12" step="0.001" value="0.025">
+                <span class="ctrl-val" id="val-scale">0.025</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Octaves</span>
+                <input type="range" id="ctrl-octaves" min="1" max="8" step="1" value="5">
+                <span class="ctrl-val" id="val-octaves">5</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Persistence</span>
+                <input type="range" id="ctrl-persistence" min="0.1" max="0.9" step="0.05" value="0.5">
+                <span class="ctrl-val" id="val-persistence">0.50</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Lacunarity</span>
+                <input type="range" id="ctrl-lacunarity" min="1.0" max="4.0" step="0.1" value="2.0">
+                <span class="ctrl-val" id="val-lacunarity">2.0</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Seed</span>
+                <input type="range" id="ctrl-seed" min="0" max="9999" step="1" value="42">
+                <span class="ctrl-val" id="val-seed">42</span>
+                <button class="btn btn-sm btn-accent" id="btn-rand-seed" title="Randomize seed"><i class="fas fa-dice"></i></button>
+            </div>
+        </div>
+
+        <!-- Terrain -->
+        <div class="ctrl-card">
+            <h3><i class="fas fa-mountain-sun mr-1"></i> Terrain</h3>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Height</span>
+                <input type="range" id="ctrl-height" min="2" max="80" step="1" value="28">
+                <span class="ctrl-val" id="val-height">28</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Water Level</span>
+                <input type="range" id="ctrl-water" min="0" max="0.75" step="0.01" value="0.32">
+                <span class="ctrl-val" id="val-water">0.32</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Flat Shade</span>
+                <div class="toggle" id="toggle-flat" role="switch" aria-label="Toggle flat shading"></div>
+                <span class="ctrl-val" id="val-flat">Off</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Wireframe</span>
+                <div class="toggle" id="toggle-wire" role="switch" aria-label="Toggle wireframe"></div>
+                <span class="ctrl-val" id="val-wire">Off</span>
+            </div>
+        </div>
+
+        <!-- Extra Layers -->
+        <div class="ctrl-card">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="!mb-0"><i class="fas fa-layer-group mr-1"></i> Extra Layers</h3>
+                <button class="btn btn-sm btn-accent" id="btn-add-layer"><i class="fas fa-plus"></i> Add</button>
+            </div>
+            <div id="layers-list">
+                <p class="text-muted text-xs italic" id="layers-empty">No extra layers. Click Add to layer additional noise.</p>
+            </div>
+        </div>
+
+        <!-- Animation -->
+        <div class="ctrl-card">
+            <h3><i class="fas fa-play mr-1"></i> Animation</h3>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Animate</span>
+                <div class="toggle" id="toggle-anim" role="switch" aria-label="Toggle animation"></div>
+                <span class="ctrl-val" id="val-anim">Off</span>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Speed</span>
+                <input type="range" id="ctrl-speed" min="0.05" max="3.0" step="0.05" value="0.6">
+                <span class="ctrl-val" id="val-speed">0.60</span>
+            </div>
+        </div>
+
+        <!-- 2D Colormap -->
+        <div class="ctrl-card">
+            <h3><i class="fas fa-palette mr-1"></i> 2D Colormap</h3>
+            <div class="cmap-group">
+                <button class="cmap-btn active" data-cmap="terrain">Terrain</button>
+                <button class="cmap-btn" data-cmap="grayscale">Grayscale</button>
+                <button class="cmap-btn" data-cmap="heat">Heat</button>
+                <button class="cmap-btn" data-cmap="ocean">Ocean</button>
+                <button class="cmap-btn" data-cmap="neon">Neon</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ==================== PERLIN NOISE ====================
+        class PerlinNoise {
+            constructor(seed = 42) {
+                this.perm = new Uint8Array(512);
+                this.grad2 = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+                this.setSeed(seed);
+            }
+            setSeed(s) {
+                const p = new Uint8Array(256);
+                for (let i = 0; i < 256; i++) p[i] = i;
+                let n = Math.abs(s * 16807 + 1) | 0;
+                for (let i = 255; i > 0; i--) {
+                    n = (n * 16807) % 2147483647;
+                    const j = n % (i + 1);
+                    [p[i], p[j]] = [p[j], p[i]];
+                }
+                for (let i = 0; i < 512; i++) this.perm[i] = p[i & 255];
+            }
+            fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+            lerp(a, b, t) { return a + t * (b - a); }
+            dot2(g, x, y) { return g[0] * x + g[1] * y; }
+            noise(x, y) {
+                const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+                const xf = x - Math.floor(x), yf = y - Math.floor(y);
+                const u = this.fade(xf), v = this.fade(yf);
+                const aa = this.perm[this.perm[X] + Y] & 7;
+                const ab = this.perm[this.perm[X] + Y + 1] & 7;
+                const ba = this.perm[this.perm[X + 1] + Y] & 7;
+                const bb = this.perm[this.perm[X + 1] + Y + 1] & 7;
+                return this.lerp(
+                    this.lerp(this.dot2(this.grad2[aa], xf, yf), this.dot2(this.grad2[ba], xf - 1, yf), u),
+                    this.lerp(this.dot2(this.grad2[ab], xf, yf - 1), this.dot2(this.grad2[bb], xf - 1, yf - 1), u),
+                    v
+                );
+            }
+            fbm(x, y, octaves, persistence, lacunarity) {
+                let total = 0, amp = 1, freq = 1, maxVal = 0;
+                for (let i = 0; i < octaves; i++) {
+                    total += this.noise(x * freq, y * freq) * amp;
+                    maxVal += amp;
+                    amp *= persistence;
+                    freq *= lacunarity;
+                }
+                return total / maxVal;
+            }
+        }
+
+        // ==================== STATE ====================
+        const TERRAIN_SIZE = 100;
+        const SEGMENTS = 150;
+        const CANVAS_RES = 400;
+        const perlin = new PerlinNoise(42);
+
+        const state = {
+            scale: 0.025,
+            octaves: 5,
+            persistence: 0.5,
+            lacunarity: 2.0,
+            seed: 42,
+            heightMul: 28,
+            waterLevel: 0.32,
+            flatShading: false,
+            wireframe: false,
+            animating: false,
+            animSpeed: 0.6,
+            time: 0,
+            colormap: 'terrain',
+            layers: [],
+        };
+
+        // ==================== COLORMAPS ====================
+        function lerpColor(a, b, t) {
+            return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+        }
+        function sampleStops(stops, v) {
+            for (let i = 0; i < stops.length - 1; i++) {
+                if (v <= stops[i + 1][0]) {
+                    const t = (v - stops[i][0]) / (stops[i + 1][0] - stops[i][0]);
+                    return lerpColor(stops[i].slice(1), stops[i + 1].slice(1), Math.max(0, Math.min(1, t)));
+                }
+            }
+            return stops[stops.length - 1].slice(1);
+        }
+        const CMAPS = {
+            terrain: [
+                [0.00, 18, 45, 72], [0.28, 28, 82, 108], [0.33, 38, 120, 140],
+                [0.36, 194, 178, 128], [0.42, 90, 148, 55], [0.58, 55, 110, 35],
+                [0.72, 100, 82, 58], [0.88, 145, 135, 125], [1.00, 242, 238, 232]
+            ],
+            grayscale: [
+                [0.0, 15, 15, 15], [0.5, 128, 128, 128], [1.0, 245, 245, 245]
+            ],
+            heat: [
+                [0.0, 10, 10, 40], [0.25, 60, 20, 120], [0.5, 180, 30, 50],
+                [0.75, 240, 140, 20], [1.0, 255, 255, 200]
+            ],
+            ocean: [
+                [0.0, 5, 12, 30], [0.3, 10, 40, 80], [0.5, 20, 90, 130],
+                [0.7, 60, 160, 180], [0.85, 140, 210, 210], [1.0, 220, 245, 245]
+            ],
+            neon: [
+                [0.0, 5, 0, 15], [0.2, 40, 0, 80], [0.4, 0, 200, 100],
+                [0.6, 0, 255, 200], [0.8, 200, 100, 255], [1.0, 255, 220, 255]
+            ]
+        };
+        function getColor(v, cmap) {
+            return sampleStops(CMAPS[cmap] || CMAPS.terrain, v);
+        }
+
+        // ==================== HEIGHT FUNCTION ====================
+        function getHeight(worldX, worldZ) {
+            const nx = worldX * state.scale + state.time;
+            const ny = worldZ * state.scale + state.time * 0.7;
+            let value = perlin.fbm(nx, ny, state.octaves, state.persistence, state.lacunarity);
+            for (const layer of state.layers) {
+                if (!layer.enabled) continue;
+                value += layer.amplitude * perlin.noise(
+                    worldX * layer.scale + layer.offsetX + state.time * 0.4,
+                    worldZ * layer.scale + layer.offsetY + state.time * 0.25
+                );
+            }
+            // Normalize: raw noise range ~[-0.707, 0.707], scale to [0,1]
+            return Math.max(0, Math.min(1, value / 0.707 * 0.5 + 0.5));
+        }
+
+        // ==================== 2D RENDERER ====================
+        const canvas2d = document.getElementById('canvas2d');
+        const ctx2d = canvas2d.getContext('2d');
+        const imgData = ctx2d.createImageData(CANVAS_RES, CANVAS_RES);
+
+        function render2D() {
+            const data = imgData.data;
+            const half = TERRAIN_SIZE / 2;
+            for (let py = 0; py < CANVAS_RES; py++) {
+                const worldZ = (py / CANVAS_RES - 0.5) * TERRAIN_SIZE;
+                for (let px = 0; px < CANVAS_RES; px++) {
+                    const worldX = (px / CANVAS_RES - 0.5) * TERRAIN_SIZE;
+                    const v = getHeight(worldX, worldZ);
+                    const [r, g, b] = getColor(v, state.colormap);
+                    const idx = (py * CANVAS_RES + px) * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = 255;
+                }
+            }
+            ctx2d.putImageData(imgData, 0, 0);
+
+            // Draw water level line indicator
+            const wl = state.waterLevel;
+            ctx2d.save();
+            ctx2d.strokeStyle = 'rgba(200,148,62,0.6)';
+            ctx2d.lineWidth = 1;
+            ctx2d.setLineDash([4, 4]);
+            // Horizontal line showing water level
+            // Find approximate pixel y for water level value (0 to 1 maps to canvas)
+            const wlY = (1 - wl) * CANVAS_RES; // inverted because y=0 is top
+            ctx2d.beginPath();
+            ctx2d.moveTo(0, wlY);
+            ctx2d.lineTo(CANVAS_RES, wlY);
+            ctx2d.stroke();
+            ctx2d.setLineDash([]);
+            // Label
+            ctx2d.font = '10px "JetBrains Mono", monospace';
+            ctx2d.fillStyle = 'rgba(200,148,62,0.8)';
+            ctx2d.fillText(`water ${wl.toFixed(2)}`, 6, wlY - 4);
+            ctx2d.restore();
+        }
+
+        // 2D hover tooltip
+        const tooltip2d = document.getElementById('tooltip-2d');
+        canvas2d.addEventListener('mousemove', (e) => {
+            const rect = canvas2d.getBoundingClientRect();
+            const sx = CANVAS_RES / rect.width;
+            const sy = CANVAS_RES / rect.height;
+            const px = Math.floor((e.clientX - rect.left) * sx);
+            const py = Math.floor((e.clientY - rect.top) * sy);
+            if (px < 0 || px >= CANVAS_RES || py < 0 || py >= CANVAS_RES) {
+                tooltip2d.classList.remove('show');
+                return;
+            }
+            const worldX = (px / CANVAS_RES - 0.5) * TERRAIN_SIZE;
+            const worldZ = (py / CANVAS_RES - 0.5) * TERRAIN_SIZE;
+            const v = getHeight(worldX, worldZ);
+            tooltip2d.textContent = `x:${worldX.toFixed(1)} z:${worldZ.toFixed(1)} h:${v.toFixed(3)}`;
+            tooltip2d.classList.add('show');
+        });
+        canvas2d.addEventListener('mouseleave', () => tooltip2d.classList.remove('show'));
+
+        // ==================== 3D RENDERER ====================
+        const container3d = document.getElementById('three-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x0c0e0d, 0.006);
+
+        const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
+        camera.position.set(65, 55, 65);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setClearColor(0x0c0e0d);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        container3d.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 5, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.maxDistance = 200;
+        controls.minDistance = 20;
+        controls.maxPolarAngle = Math.PI * 0.48;
+        controls.update();
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x8899aa, 0.5);
+        scene.add(ambientLight);
+
+        const hemiLight = new THREE.HemisphereLight(0xc8d8e8, 0x3a3020, 0.6);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.4);
+        dirLight.position.set(40, 60, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.set(1024, 1024);
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 200;
+        dirLight.shadow.camera.left = -60;
+        dirLight.shadow.camera.right = 60;
+        dirLight.shadow.camera.top = 60;
+        dirLight.shadow.camera.bottom = -60;
+        scene.add(dirLight);
+
+        // Terrain mesh
+        const terrainGeo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEGMENTS, SEGMENTS);
+        terrainGeo.rotateX(-Math.PI / 2);
+        const vertCount = (SEGMENTS + 1) * (SEGMENTS + 1);
+        const colorArr = new Float32Array(vertCount * 3);
+        terrainGeo.setAttribute('color', new THREE.BufferAttribute(colorArr, 3));
+
+        const terrainMat = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            roughness: 0.82,
+            metalness: 0.05,
+            flatShading: false,
+        });
+        const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+        terrainMesh.castShadow = true;
+        terrainMesh.receiveShadow = true;
+        scene.add(terrainMesh);
+
+        document.getElementById('vert-count').textContent = `${vertCount.toLocaleString()} verts`;
+
+        // Water plane
+        const waterGeo = new THREE.PlaneGeometry(TERRAIN_SIZE * 1.6, TERRAIN_SIZE * 1.6);
+        waterGeo.rotateX(-Math.PI / 2);
+        const waterMat = new THREE.MeshStandardMaterial({
+            color: 0x1a6a8a,
+            transparent: true,
+            opacity: 0.55,
+            roughness: 0.15,
+            metalness: 0.4,
+        });
+        const waterMesh = new THREE.Mesh(waterGeo, waterMat);
+        waterMesh.receiveShadow = true;
+        scene.add(waterMesh);
+
+        function updateTerrain() {
+            const pos = terrainGeo.attributes.position.array;
+            const col = terrainGeo.attributes.color.array;
+
+            for (let j = 0; j <= SEGMENTS; j++) {
+                for (let i = 0; i <= SEGMENTS; i++) {
+                    const idx = j * (SEGMENTS + 1) + i;
+                    const wx = pos[idx * 3];
+                    const wz = pos[idx * 3 + 2];
+                    const h = getHeight(wx, wz);
+                    pos[idx * 3 + 1] = h * state.heightMul;
+                    // Use terrain colormap for vertex colors regardless of 2D selection
+                    const [r, g, b] = getColor(h, 'terrain');
+                    col[idx * 3] = r / 255;
+                    col[idx * 3 + 1] = g / 255;
+                    col[idx * 3 + 2] = b / 255;
+                }
+            }
+            terrainGeo.attributes.position.needsUpdate = true;
+            terrainGeo.attributes.color.needsUpdate = true;
+            terrainGeo.computeVertexNormals();
+            waterMesh.position.y = state.waterLevel * state.heightMul;
+        }
+
+        function resize3D() {
+            const w = container3d.clientWidth;
+            const h = container3d.clientHeight;
+            if (w === 0 || h === 0) return;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+
+        // ==================== CONTROLS WIRING ====================
+        function bindSlider(id, key, fmt, onChange) {
+            const el = document.getElementById('ctrl-' + id);
+            const valEl = document.getElementById('val-' + id);
+            el.addEventListener('input', () => {
+                const v = parseFloat(el.value);
+                state[key] = v;
+                valEl.textContent = fmt(v);
+                if (onChange) onChange(v);
+                scheduleUpdate();
+            });
+        }
+
+        bindSlider('scale', 'scale', v => v.toFixed(3));
+        bindSlider('octaves', 'octaves', v => v.toString());
+        bindSlider('persistence', 'persistence', v => v.toFixed(2));
+        bindSlider('lacunarity', 'lacunarity', v => v.toFixed(1));
+        bindSlider('seed', 'seed', v => v.toString(), () => {
+            perlin.setSeed(state.seed);
+        });
+        bindSlider('height', 'heightMul', v => v.toString());
+        bindSlider('water', 'waterLevel', v => v.toFixed(2));
+        bindSlider('speed', 'animSpeed', v => v.toFixed(2));
+
+        // Randomize seed
+        document.getElementById('btn-rand-seed').addEventListener('click', () => {
+            const s = Math.floor(Math.random() * 10000);
+            state.seed = s;
+            perlin.setSeed(s);
+            document.getElementById('ctrl-seed').value = s;
+            document.getElementById('val-seed').textContent = s;
+            scheduleUpdate();
+        });
+
+        // Toggles
+        function bindToggle(id, key, labelId, onChange) {
+            const el = document.getElementById(id);
+            const label = document.getElementById(labelId);
+            el.addEventListener('click', () => {
+                state[key] = !state[key];
+                el.classList.toggle('on', state[key]);
+                label.textContent = state[key] ? 'On' : 'Off';
+                if (onChange) onChange(state[key]);
+                scheduleUpdate();
+            });
+        }
+        bindToggle('toggle-flat', 'flatShading', 'val-flat', (v) => {
+            terrainMat.flatShading = v;
+            terrainMat.needsUpdate = true;
+        });
+        bindToggle('toggle-wire', 'wireframe', 'val-wire', (v) => {
+            terrainMat.wireframe = v;
+        });
+        bindToggle('toggle-anim', 'animating', 'val-anim', (v) => {
+            document.getElementById('fps-display').style.display = v ? 'block' : 'none';
+            document.getElementById('dot-2d').classList.toggle('off', !v);
+            document.getElementById('dot-3d').classList.toggle('off', !v);
+            document.getElementById('panel-2d').classList.toggle('live', v);
+            document.getElementById('panel-3d').classList.toggle('live', v);
+        });
+
+        // Colormap buttons
+        document.querySelectorAll('.cmap-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.cmap-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.colormap = btn.dataset.cmap;
+                scheduleUpdate();
+            });
+        });
+
+        // Export
+        document.getElementById('btn-export').addEventListener('click', () => {
+            // Render at full res for export
+            render2D();
+            const link = document.createElement('a');
+            link.download = `perlin-terrain-${Date.now()}.png`;
+            link.href = canvas2d.toDataURL('image/png');
+            link.click();
+        });
+
+        // Reset camera
+        document.getElementById('btn-reset-cam').addEventListener('click', () => {
+            camera.position.set(65, 55, 65);
+            controls.target.set(0, 5, 0);
+            controls.update();
+        });
+
+        // ==================== LAYER MANAGEMENT ====================
+        const layersList = document.getElementById('layers-list');
+        const layersEmpty = document.getElementById('layers-empty');
+
+        function renderLayers() {
+            // Remove old layer elements (keep empty msg)
+            layersList.querySelectorAll('.layer-item').forEach(el => el.remove());
+            layersEmpty.style.display = state.layers.length === 0 ? 'block' : 'none';
+
+            state.layers.forEach((layer, i) => {
+                const div = document.createElement('div');
+                div.className = 'layer-item';
+
+                const head = document.createElement('div');
+                head.className = 'layer-head';
+                const label = document.createElement('span');
+                label.textContent = `Layer ${i + 1}`;
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn btn-sm btn-danger';
+                removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+                removeBtn.addEventListener('click', () => {
+                    state.layers.splice(i, 1);
+                    renderLayers();
+                    scheduleUpdate();
+                });
+                head.appendChild(label);
+                head.appendChild(removeBtn);
+                div.appendChild(head);
+
+                // Scale
+                div.appendChild(makeLayerRow('Scale', layer.scale, 0.005, 0.2, 0.001, (v) => {
+                    layer.scale = v;
+                    scheduleUpdate();
+                }, `layer-scale-${i}`));
+
+                // Amplitude
+                div.appendChild(makeLayerRow('Amp', layer.amplitude, 0.05, 2.0, 0.05, (v) => {
+                    layer.amplitude = v;
+                    scheduleUpdate();
+                }, `layer-amp-${i}`));
+
+                layersList.appendChild(div);
+            });
+        }
+
+        function makeLayerRow(label, value, min, max, step, onChange, valId) {
+            const row = document.createElement('div');
+            row.className = 'ctrl-row';
+            const lbl = document.createElement('span');
+            lbl.className = 'ctrl-label';
+            lbl.textContent = label;
+            const input = document.createElement('input');
+            input.type = 'range';
+            input.min = min;
+            input.max = max;
+            input.step = step;
+            input.value = value;
+            const val = document.createElement('span');
+            val.className = 'ctrl-val';
+            val.id = valId;
+            val.textContent = parseFloat(value).toFixed(step < 0.01 ? 3 : 2);
+            input.addEventListener('input', () => {
+                const v = parseFloat(input.value);
+                val.textContent = v.toFixed(step < 0.01 ? 3 : 2);
+                onChange(v);
+            });
+            row.appendChild(lbl);
+            row.appendChild(input);
+            row.appendChild(val);
+            return row;
+        }
+
+        document.getElementById('btn-add-layer').addEventListener('click', () => {
+            state.layers.push({
+                scale: 0.03 + Math.random() * 0.06,
+                amplitude: 0.2 + Math.random() * 0.3,
+                offsetX: Math.random() * 200 - 100,
+                offsetY: Math.random() * 200 - 100,
+                enabled: true,
+            });
+            renderLayers();
+            scheduleUpdate();
+        });
+
+        // ==================== UPDATE SCHEDULING ====================
+        let updatePending = false;
+        function scheduleUpdate() {
+            if (!updatePending && !state.animating) {
+                updatePending = true;
+                requestAnimationFrame(() => {
+                    updatePending = false;
+                    render2D();
+                    updateTerrain();
+                });
+            }
+        }
+
+        // ==================== ANIMATION LOOP ====================
+        let frameCount = 0, lastFpsTime = performance.now(), fps = 0;
+        const fpsEl = document.getElementById('fps-display');
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (state.animating) {
+                state.time += state.animSpeed * 0.016;
+                render2D();
+                updateTerrain();
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+
+            // FPS counter
+            if (state.animating) {
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFpsTime >= 1000) {
+                    fps = frameCount;
+                    frameCount = 0;
+                    lastFpsTime = now;
+                    fpsEl.textContent = `${fps} fps`;
+                }
+            }
+        }
+
+        // ==================== RESIZE ====================
+        function onResize() {
+            resize3D();
+        }
+        window.addEventListener('resize', onResize);
+        new ResizeObserver(onResize).observe(container3d);
+
+        // ==================== INIT ====================
+        resize3D();
+        render2D();
+        updateTerrain();
+        renderLayers();
+        animate();
+    </script>
+</body>
+</html>
